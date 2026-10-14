@@ -15,3 +15,6 @@ gbe-for:
 
 gbe-if-else:
   go run gobyexample.com/if-else/main.go
+
+gbe-switch:
+  go run gobyexample.com/switch/main.go

@@ -18,3 +18,9 @@ gbe-if-else:
 
 gbe-switch:
   go run gobyexample.com/switch/main.go
+
+gbe-array:
+  go run gobyexample.com/array/main.go
+
+gbe-slices:
+  go run gobyexample.com/slices/main.go

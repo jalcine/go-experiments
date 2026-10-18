@@ -326,12 +326,16 @@ func (client *HttpClient) ListAllPosts(ctx context.Context) ([]Post, error) {
 			return nil, fmt.Errorf("failed to read body from response for page %d: %v", page_num, err)
 		}
 
+		if resp.StatusCode >= 500 {
+			return nil, fmt.Errorf("failed to fetch more posts on page #%d, %s", page_num, bytes)
+		}
+
 		var page_posts []Post
 		if err := json.Unmarshal(bytes, &page_posts); err != nil {
 			return nil, fmt.Errorf("failed to decode JSON for page %d: %v", page_num, err)
 		}
 
-		if len(page_posts) == 0 || len(page_posts) < limit {
+		if len(page_posts) == 0 {
 			break
 		}
 

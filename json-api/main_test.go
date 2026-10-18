@@ -245,3 +245,71 @@ func TestHttpClient_Pagination_MultiPage(t *testing.T) {
 
 	})
 }
+
+func TestHttpClient_Pagination_SinglePage(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var posts []Post
+
+		json_bytes, err := json.Marshal(posts)
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			w.Write(json_bytes)
+		}
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{
+		BaseURL: ts.URL,
+		Client:  &http.Client{},
+	}
+
+	t.Run("paginates over all posts", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		posts, err := client.ListAllPosts(ctx)
+
+		if err != nil {
+			t.Fatalf("expected no error on pagination; got %v", err)
+		}
+
+		if len(posts) != 0 {
+			t.Fatalf("posts were retrieved")
+		}
+
+	})
+}
+
+func TestHttpClient_Pagination_ErrorMidWalk(t *testing.T) {
+	nextPost := postGen()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page_num := r.URL.Query().Get("_page")
+
+		if page_num == "1" {
+			json_bytes, _ := json.Marshal([]Post{nextPost(), nextPost()})
+			w.Write(json_bytes)
+
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{BaseURL: ts.URL, Client: &http.Client{}}
+
+	t.Run("fails on second page", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := client.ListAllPosts(ctx)
+
+		if err == nil {
+			t.Fatalf("should have thrown an error")
+		}
+	})
+}

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestFlexibleID_DecodesFromNumberOrString(t *testing.T) {
@@ -101,4 +103,75 @@ func TestGetJson_Decode_500(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
+}
+
+func TestHttpClient_DeletePost_204(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{
+		BaseURL: ts.URL,
+		Client:  &http.Client{},
+	}
+
+	t.Run("deletes a post", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := client.DeletePost(ctx, 1); err != nil {
+			t.Fatalf("expected no error on deletion; got %v", err)
+		}
+
+	})
+}
+
+func TestHttpClient_DeletePost_200(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{}`))
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{
+		BaseURL: ts.URL,
+		Client:  &http.Client{},
+	}
+
+	t.Run("deletes a post", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := client.DeletePost(ctx, 1); err != nil {
+			t.Fatalf("expected no error on deletion; got %v", err)
+		}
+
+	})
+}
+
+func TestHttpClient_DeletePost_500(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"message": "Failed to work."}`))
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{
+		BaseURL: ts.URL,
+		Client:  &http.Client{},
+	}
+
+	t.Run("deletes a post", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := client.DeletePost(ctx, 1); err == nil {
+			t.Fatalf("expected an error on deletion; got nothing")
+		}
+
+	})
 }

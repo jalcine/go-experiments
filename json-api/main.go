@@ -298,6 +298,61 @@ type HttpClient struct {
 	Client  *http.Client
 }
 
+func (client *HttpClient) DeletePost(ctx context.Context, postId int) error {
+	post_url := client.BaseURL + "/posts/" + strconv.Itoa(postId)
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", post_url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to form deletion request: %v", err)
+	}
+
+	resp, err := client.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("deletion request failed: %v", err)
+	}
+
+	defer resp.Body.Close()
+
+	bytes, err := io.ReadAll(resp.Body)
+
+	if err != nil {
+		return fmt.Errorf("failed to parse response body: %v", err)
+	}
+
+	switch resp.StatusCode {
+	case 204:
+		{
+			if resp.ContentLength != 0 {
+				return fmt.Errorf("did not expect a body")
+			}
+		}
+	case 200:
+		{
+			var obj = map[string]any{}
+			if err = json.Unmarshal(bytes, &obj); err != nil {
+				return fmt.Errorf("failed to convert body into JSON (body %v): %v", bytes, err)
+			}
+
+			if len(obj) != 0 {
+				return fmt.Errorf("expected empty object as response")
+			}
+		}
+	case 500:
+		{
+			var obj = map[string]any{}
+			if err = json.Unmarshal(bytes, &obj); err != nil {
+				return fmt.Errorf("failed to convert body into JSON (body %v): %v", bytes, err)
+			}
+
+			return fmt.Errorf("got 500: %v", obj)
+		}
+
+	}
+
+	return nil
+
+}
+
 func (client *HttpClient) ReplacePost(ctx context.Context, post Post) (*Post, error) {
 	post_url := client.BaseURL + "/posts/" + strconv.Itoa(post.ID.ID)
 

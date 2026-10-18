@@ -41,6 +41,10 @@ func (f *FlexibleID) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (f FlexibleID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.ID)
+}
+
 type Post struct {
 	ID     *FlexibleID `json:"id,omitempty"`
 	UserID int         `json:"userId,omitempty"`
@@ -296,6 +300,46 @@ func handle_create(client http.Client) error {
 type HttpClient struct {
 	BaseURL string
 	Client  *http.Client
+}
+
+func (client *HttpClient) ListAllPosts(ctx context.Context) ([]Post, error) {
+	var posts []Post
+	page_num := 1
+	limit := 10
+
+	for {
+		current_page_url := client.BaseURL + "/posts?_page=" + strconv.Itoa(page_num) + "&_limit=" + strconv.Itoa(limit)
+		req, err := http.NewRequestWithContext(ctx, "GET", current_page_url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to form pagination request for page %d: %v", page_num, err)
+		}
+
+		resp, err := client.Client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("pagination of page %d request failed: %v", page_num, err)
+		}
+
+		defer resp.Body.Close()
+
+		bytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read body from response for page %d: %v", page_num, err)
+		}
+
+		var page_posts []Post
+		if err := json.Unmarshal(bytes, &page_posts); err != nil {
+			return nil, fmt.Errorf("failed to decode JSON for page %d: %v", page_num, err)
+		}
+
+		if len(page_posts) == 0 || len(page_posts) < limit {
+			break
+		}
+
+		posts = append(posts, page_posts...)
+		page_num++
+	}
+
+	return posts, nil
 }
 
 func (client *HttpClient) DeletePost(ctx context.Context, postId int) error {

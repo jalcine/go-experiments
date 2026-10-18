@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -171,6 +172,75 @@ func TestHttpClient_DeletePost_500(t *testing.T) {
 
 		if err := client.DeletePost(ctx, 1); err == nil {
 			t.Fatalf("expected an error on deletion; got nothing")
+		}
+
+	})
+}
+
+func postGen() func() Post {
+	i := 0
+
+	return func() Post {
+		i += 1
+
+		return Post{
+			ID:    &FlexibleID{ID: i},
+			Title: "Post " + strconv.Itoa(i),
+			Body:  "The contents of post #" + strconv.Itoa(i),
+		}
+
+	}
+
+}
+
+func TestHttpClient_Pagination_MultiPage(t *testing.T) {
+	nextPost := postGen()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var posts []Post
+
+		page_num := r.URL.Query().Get("_page")
+		limit, _ := strconv.Atoi(r.URL.Query().Get("_limit"))
+
+		switch page_num {
+		case "1", "2", "3":
+			{
+				for range limit {
+					posts = append(posts, nextPost())
+				}
+			}
+		case "4":
+			posts = []Post{nextPost()}
+		}
+
+		json_bytes, err := json.Marshal(posts)
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			w.Write(json_bytes)
+		}
+	})
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{
+		BaseURL: ts.URL,
+		Client:  &http.Client{},
+	}
+
+	t.Run("paginates over all posts", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		posts, err := client.ListAllPosts(ctx)
+
+		if err != nil {
+			t.Fatalf("expected no error on pagination; got %v", err)
+		}
+
+		if len(posts) == 0 {
+			t.Fatalf("no posts were retrieved")
 		}
 
 	})

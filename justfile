@@ -24,3 +24,27 @@ gbe-array:
 
 gbe-slices:
   go run gobyexample.com/slices/main.go
+
+gbe-maps:
+  go run gobyexample.com/maps/main.go
+
+gbe-functions:
+  go run gobyexample.com/functions/main.go
+
+gbe-multi-return-values:
+  go run gobyexample.com/multi-return-values/main.go
+
+gbe-variadic-functions:
+  go run gobyexample.com/variadic-functions/main.go
+
+gbe-closures:
+  go run gobyexample.com/closures/main.go
+
+gbe-recursion:
+  go run gobyexample.com/recursion/main.go
+
+gbe-json:
+  go run gobyexample.com/json/main.go
+
+json-api:
+  go run json-api/main.go

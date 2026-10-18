@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,11 +15,37 @@ import (
 	"time"
 )
 
+type FlexibleID struct {
+	ID int
+}
+
+func (f *FlexibleID) UnmarshalJSON(data []byte) error {
+	if data[0] == '"' || data[0] == 't' || data[0] == 'f' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		num, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		f.ID = num
+	} else {
+		var num int
+		if err := json.Unmarshal(data, &num); err != nil {
+			return err
+		}
+		f.ID = num
+	}
+
+	return nil
+}
+
 type Post struct {
-	ID     *int   `json:"id,omitempty"`
-	UserID int    `json:"userId,omitempty"`
-	Title  string `json:"title,omitempty"`
-	Body   string `json:"body,omitempty"`
+	ID     *FlexibleID `json:"id,omitempty"`
+	UserID int         `json:"userId,omitempty"`
+	Title  string      `json:"title,omitempty"`
+	Body   string      `json:"body,omitempty"`
 }
 
 type Company struct {
@@ -99,6 +126,8 @@ func main() {
 
 }
 
+var ErrBadStatus = errors.New("bad status code")
+
 func getJSON[T any](client http.Client, url string, out *T) error {
 	resp, err := client.Get(url)
 
@@ -109,7 +138,7 @@ func getJSON[T any](client http.Client, url string, out *T) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("request failed: %d", resp.StatusCode)
+		return fmt.Errorf("request failed: %d: %w", resp.StatusCode, ErrBadStatus)
 	}
 
 	return json.NewDecoder(resp.Body).Decode(out)
@@ -270,7 +299,7 @@ type HttpClient struct {
 }
 
 func (client *HttpClient) ReplacePost(ctx context.Context, post Post) (*Post, error) {
-	post_url := client.BaseURL + "/posts/" + strconv.Itoa(*post.ID)
+	post_url := client.BaseURL + "/posts/" + strconv.Itoa(post.ID.ID)
 
 	json_string, err := json.Marshal(post)
 
@@ -368,7 +397,7 @@ func handle_put(client http.Client) error {
 	defer cancel()
 
 	updated, err := api.ReplacePost(ctx, Post{
-		ID: new(1), UserID: 1, Title: "updated", Body: "replaced Body",
+		ID: new(FlexibleID{}), UserID: 1, Title: "updated", Body: "replaced Body",
 	})
 
 	if err != nil {
@@ -378,7 +407,7 @@ func handle_put(client http.Client) error {
 	fmt.Printf("replaced post: id=%d title=%s\n", *updated.ID, updated.Title)
 
 	patched, err := api.PatchPost(ctx, PostPatch{
-		ID:    *updated.ID,
+		ID:    updated.ID.ID,
 		Title: new("patched"),
 	})
 	if err != nil {
@@ -428,7 +457,7 @@ func (client *HttpClient) GetUserPosts(ctx context.Context, userId int) error {
 		}
 
 		fmt.Println(*p.ID, p.Title)
-		postIds = append(postIds, *p.ID)
+		postIds = append(postIds, p.ID.ID)
 	}
 
 	counts := make([]int, len(postIds))

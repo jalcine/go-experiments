@@ -47,4 +47,7 @@ gbe-json:
   go run gobyexample.com/json/main.go
 
 json-api:
-  go run json-api/main.go
+  cd json-api && go run .
+
+json-api-test:
+  cd json-api && go test ./...

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -86,6 +87,12 @@ func main() {
 	fmt.Println("Exercise: ==== handling updating =====")
 
 	if err := handle_put(client); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+	}
+	fmt.Println("======================================")
+	fmt.Println("Exercise: ==== handling concurrency =====")
+
+	if err := handle_user_posts(client); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 	}
 	fmt.Println("======================================")
@@ -345,6 +352,7 @@ func (client *HttpClient) PatchPost(ctx context.Context, post PostPatch) (*Post,
 }
 
 type PostPatch struct {
+	ID    int
 	Title *string `json:"title,omitempty"`
 	Body  *string `json:"body,omitempty"`
 }
@@ -370,6 +378,7 @@ func handle_put(client http.Client) error {
 	fmt.Printf("replaced post: id=%d title=%s\n", *updated.ID, updated.Title)
 
 	patched, err := api.PatchPost(ctx, PostPatch{
+		ID:    *updated.ID,
 		Title: new("patched"),
 	})
 	if err != nil {
@@ -379,4 +388,100 @@ func handle_put(client http.Client) error {
 	fmt.Printf("patched post: id=%d title=%s  body=%s\n", *patched.ID, patched.Title, patched.Body)
 
 	return nil
+}
+
+func (client *HttpClient) GetUserPosts(ctx context.Context, userId int) error {
+	user_posts_url := client.BaseURL + "/users/" + strconv.Itoa(userId) + "/posts"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", user_posts_url, nil)
+
+	if err != nil {
+		return fmt.Errorf("failed to build request: %w", err)
+	}
+
+	resp, err := client.Client.Do(req)
+
+	if err != nil {
+		return fmt.Errorf("failed to invoke request to stream posts: %w", err)
+	}
+
+	var postIds []int
+
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
+
+	first_char, err := dec.Token()
+	if err != nil {
+		return fmt.Errorf("failed to pluck first token: %s", err)
+	}
+
+	if first_char != json.Delim('[') {
+		return fmt.Errorf("the opening character was not [, it was %s", first_char)
+	}
+
+	for dec.More() {
+		var p Post
+
+		if err := dec.Decode(&p); err != nil {
+			return err
+		}
+
+		fmt.Println(*p.ID, p.Title)
+		postIds = append(postIds, *p.ID)
+	}
+
+	counts := make([]int, len(postIds))
+	comment_errors := make([]error, len(postIds))
+
+	var wg sync.WaitGroup
+
+	for i, id := range postIds {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			comments, err := fetch_comments(client, id)
+			if err != nil {
+				comment_errors[i] = fmt.Errorf("failed to get comments for post #%d", id)
+				return
+			}
+
+			counts[i] = len(comments)
+		}()
+
+	}
+
+	wg.Wait()
+
+	for i, id := range postIds {
+		if comment_errors[i] != nil {
+			fmt.Fprintf(os.Stderr, "post %d: %v\n", id, comment_errors[i])
+		} else {
+			fmt.Printf("post %d: %d comments\n", id, counts[i])
+		}
+	}
+
+	return nil
+}
+
+func fetch_comments(client *HttpClient, postId int) ([]Comment, error) {
+	var comments []Comment
+	comments_url := client.BaseURL + "/posts/" + strconv.Itoa(postId) + "/comments"
+	if err := getJSON(*client.Client, comments_url, &comments); err != nil {
+		return nil, err
+	}
+	return comments, nil
+}
+
+func handle_user_posts(client http.Client) error {
+	api := &HttpClient{
+		BaseURL: "https://jsonplaceholder.typicode.com",
+		Client:  &client,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	defer cancel()
+
+	return api.GetUserPosts(ctx, 1)
 }

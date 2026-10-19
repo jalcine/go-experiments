@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -481,6 +482,50 @@ func (client *HttpClient) PatchPost(ctx context.Context, post PostPatch) (*Post,
 	}
 
 	return &parsed_post, nil
+}
+
+func (client *HttpClient) CreatePostForm(ctx context.Context, post Post) error {
+	var values = url.Values{}
+	values.Add("title", post.Title)
+	values.Add("id", strconv.Itoa(post.ID.ID))
+	values.Add("user_id", strconv.Itoa(post.UserID))
+	values.Add("body", post.Body)
+	form_body := values.Encode()
+	form_reader := strings.NewReader(form_body)
+
+	create_post_url := client.BaseURL + "/posts"
+	req, err := http.NewRequestWithContext(ctx, "POST", create_post_url, form_reader)
+
+	if err != nil {
+		return fmt.Errorf("failed to form request to make post: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := client.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send form request for post: %w", err)
+	}
+
+	content_type := resp.Header.Get("Content-Type")
+	if strings.HasPrefix(content_type, "application/json") {
+		return fmt.Errorf("invalid content type in response; expected json, got %s", content_type)
+	}
+
+	defer resp.Body.Close()
+
+	var new_post Post
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("the post was not created: %s", ErrBadStatus)
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&new_post); err != nil {
+		return fmt.Errorf("failed to parse JSON into post object %s", err)
+	}
+
+	return nil
+
 }
 
 type PostPatch struct {

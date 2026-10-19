@@ -313,3 +313,58 @@ func TestHttpClient_Pagination_ErrorMidWalk(t *testing.T) {
 		}
 	})
 }
+
+func TestHttpClient_CreatePostForm(t *testing.T) {
+	nextPost := postGen()
+	controlPost := nextPost()
+	failingPost := nextPost()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if r.PostForm.Get("title") != controlPost.Title {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json_bytes, err := json.Marshal(controlPost)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(json_bytes)
+	})
+
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{BaseURL: ts.URL, Client: &http.Client{}}
+
+	t.Run("happy", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := client.CreatePostForm(ctx, controlPost)
+
+		if err != nil {
+			t.Fatalf("should have not thrown an error; got %s", err)
+		}
+	})
+
+	t.Run("server error", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := client.CreatePostForm(ctx, failingPost)
+
+		if err == nil {
+			t.Fatalf("should have thrown an error")
+		}
+	})
+
+}

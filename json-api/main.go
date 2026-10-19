@@ -612,11 +612,14 @@ func (client *HttpClient) GetUserPosts(ctx context.Context, userId int) error {
 	comment_errors := make([]error, len(postIds))
 
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, 5)
 
 	for i, id := range postIds {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			comments, err := fetch_comments(client, id)
 			if err != nil {
 				comment_errors[i] = fmt.Errorf("failed to get comments for post #%d", id)
@@ -633,6 +636,7 @@ func (client *HttpClient) GetUserPosts(ctx context.Context, userId int) error {
 	for i, id := range postIds {
 		if comment_errors[i] != nil {
 			fmt.Fprintf(os.Stderr, "post %d: %v\n", id, comment_errors[i])
+			return comment_errors[i]
 		} else {
 			fmt.Printf("post %d: %d comments\n", id, counts[i])
 		}

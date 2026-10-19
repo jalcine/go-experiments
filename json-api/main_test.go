@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -365,6 +366,52 @@ func TestHttpClient_CreatePostForm(t *testing.T) {
 		if err == nil {
 			t.Fatalf("should have thrown an error")
 		}
+	})
+
+}
+
+func TestHttpClient_GetUserPosts(t *testing.T) {
+	nextPost := postGen()
+	posts := make([]Post, 20)
+	for i := range posts {
+		posts[i] = nextPost()
+	}
+	var inFlight, peak atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := inFlight.Add(1)
+		defer inFlight.Add(-1)
+
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+		json_bytes, _ := json.Marshal(posts)
+		w.Write(json_bytes)
+	})
+
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	client := &HttpClient{BaseURL: ts.URL, Client: &http.Client{}}
+
+	t.Run("check concurrency", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+		defer cancel()
+
+		err := client.GetUserPosts(ctx, 1)
+
+		if err != nil {
+			t.Fatalf("failed to get posts: %s", err)
+		}
+
+		if peak.Load() > 5 {
+			t.Errorf("exceeded cap: peak %d", peak.Load())
+		}
+
 	})
 
 }

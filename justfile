@@ -46,6 +46,13 @@ gbe-recursion:
 gbe-range-over-types:
   go run gobyexample.com/range-over-types/main.go
 
+gbe-pointers:
+  go run gobyexample.com/pointers/main.go
+
+gbe-string-rune:
+  go run gobyexample.com/string-rune/main.go
+
+
 gbe-json:
   go run gobyexample.com/json/main.go
 

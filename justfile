@@ -43,8 +43,14 @@ gbe-closures:
 gbe-recursion:
   go run gobyexample.com/recursion/main.go
 
+gbe-range-over-types:
+  go run gobyexample.com/range-over-types/main.go
+
 gbe-json:
   go run gobyexample.com/json/main.go
+
+gbe-enums:
+  go run gobyexample.com/enums/main.go
 
 json-api:
   cd json-api && go run .
